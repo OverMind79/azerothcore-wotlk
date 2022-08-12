@@ -122,9 +122,9 @@ class Reader(object):
         self._cur_block += 1
     
     def read(self, size=-1):
-        while size < 0 or sum(map(len, self._buf)) < size:
-            if self._cur_block == self._file.blocks:
-                break
+        while (
+            size < 0 or sum(map(len, self._buf)) < size
+        ) and self._cur_block != self._file.blocks:
             self._read_block()
         buf = "".join(self._buf)
         if size < 0:
@@ -149,18 +149,18 @@ class Reader(object):
         return ''.join(line)
     
     def next(self):
-        line = self.readline()
-        if not line:
+        if line := self.readline():
+            return line
+        else:
             raise StopIteration
-        return line
     
     def readlines(self, sizehint=-1):
         res = []
         while sizehint < 0 or sum(map(len, res)) < sizehint:
-            line = self.readline()
-            if not line:
+            if line := self.readline():
+                res.append(line)
+            else:
                 break
-            res.append(line)
         return res
     
     xreadlines = __iter__
@@ -174,7 +174,7 @@ class File(object):
     def __init__(self, archive, number, ctypes=ctypes, libmpq=libmpq):
         self._archive = archive
         self.number = number
-        
+
         for name, atype in [
             ("packed_size", ctypes.c_uint64),
             ("unpacked_size", ctypes.c_uint64),
@@ -185,7 +185,7 @@ class File(object):
             ("imploded", ctypes.c_uint32),
         ]:
             data = atype()
-            func = getattr(libmpq, "libmpq__file_"+name)
+            func = getattr(libmpq, f"libmpq__file_{name}")
             func(self._archive._mpq, self.number, ctypes.byref(data))
             setattr(self, name, data.value)
     
@@ -214,12 +214,12 @@ class Archive(object):
         else:
             self.filename = source
             offset = -1
-        
+
         self._mpq = ctypes.c_void_p()
         libmpq.libmpq__archive_open(ctypes.byref(self._mpq), self.filename,
             ctypes.c_uint64(offset))
         self._opened = True
-        
+
         for field_name, field_type in [
             ("packed_size", ctypes.c_uint64),
             ("unpacked_size", ctypes.c_uint64),
@@ -227,7 +227,7 @@ class Archive(object):
             ("version", ctypes.c_uint32),
             ("files", ctypes.c_uint32),
         ]:
-            func = getattr(libmpq, "libmpq__archive_" + field_name)
+            func = getattr(libmpq, f"libmpq__archive_{field_name}")
             data = field_type()
             func(self._mpq, ctypes.byref(data))
             setattr(self, field_name, data.value)
